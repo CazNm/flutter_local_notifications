@@ -46,7 +46,10 @@ enum AndroidNotificationStyle {
   messaging,
 
   /// The media style.
-  media
+  media,
+
+  /// The custom avatar style
+  customAvatar
 }
 
 /// Specifies the source for a sound used by Android notifications.

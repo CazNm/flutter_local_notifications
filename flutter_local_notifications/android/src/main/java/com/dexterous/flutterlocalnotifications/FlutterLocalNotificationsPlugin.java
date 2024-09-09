@@ -3,6 +3,8 @@ package com.dexterous.flutterlocalnotifications;
 import static android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT;
 import static android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM;
 
+import static androidx.core.view.accessibility.AccessibilityEventCompat.setAction;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -12,10 +14,12 @@ import android.app.NotificationChannel;
 import android.app.NotificationChannelGroup;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.pm.ShortcutInfo;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -26,6 +30,8 @@ import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
+import android.os.Message;
+import android.provider.ContactsContract;
 import android.service.notification.StatusBarNotification;
 import android.text.Html;
 import android.text.Spannable;
@@ -34,10 +40,12 @@ import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.util.Log;
+import android.widget.RemoteViews;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.WorkerThread;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.AlarmManagerCompat;
 import androidx.core.app.NotificationCompat;
@@ -46,6 +54,9 @@ import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.Person;
 import androidx.core.app.RemoteInput;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.LocusIdCompat;
+import androidx.core.content.pm.ShortcutInfoCompat;
+import androidx.core.content.pm.ShortcutManagerCompat;
 import androidx.core.graphics.drawable.IconCompat;
 
 import com.dexterous.flutterlocalnotifications.isolate.IsolatePreferences;
@@ -66,6 +77,7 @@ import com.dexterous.flutterlocalnotifications.models.ScheduledNotificationRepea
 import com.dexterous.flutterlocalnotifications.models.SoundSource;
 import com.dexterous.flutterlocalnotifications.models.styles.BigPictureStyleInformation;
 import com.dexterous.flutterlocalnotifications.models.styles.BigTextStyleInformation;
+import com.dexterous.flutterlocalnotifications.models.styles.CustomAvatarStyleInformation;
 import com.dexterous.flutterlocalnotifications.models.styles.DefaultStyleInformation;
 import com.dexterous.flutterlocalnotifications.models.styles.InboxStyleInformation;
 import com.dexterous.flutterlocalnotifications.models.styles.MessagingStyleInformation;
@@ -994,6 +1006,7 @@ public class FlutterLocalNotificationsPlugin
       Context context,
       NotificationDetails notificationDetails,
       NotificationCompat.Builder builder) {
+        Log.d("caz_tst", String.valueOf(notificationDetails.style));
     switch (notificationDetails.style) {
       case BigPicture:
         setBigPictureStyle(context, notificationDetails, builder);
@@ -1010,6 +1023,8 @@ public class FlutterLocalNotificationsPlugin
       case Media:
         setMediaStyle(builder);
         break;
+      case CustomAvatar:
+        setCustomAvatarStyle(context, notificationDetails, builder);
       default:
         break;
     }
@@ -1122,6 +1137,89 @@ public class FlutterLocalNotificationsPlugin
     }
     builder.setStyle(messagingStyle);
   }
+
+    private static void setCustomAvatarStyle(
+            Context context,
+            NotificationDetails notificationDetails,
+            NotificationCompat.Builder builder
+    ) {
+        Log.d("caz_tst ", "custom avatar is working");
+        String shorcutId = "this is it";
+
+        CustomAvatarStyleInformation customAvatarStyleInformation = (CustomAvatarStyleInformation) notificationDetails.styleInformation;
+        Bitmap avatarBitmapImage = getBitmapFromSource(
+                context,
+                customAvatarStyleInformation.customAvatar,
+                customAvatarStyleInformation.customAvatarBitmapSource);
+        MemoryContentProvider.storeBitmapInMemory("avatar", avatarBitmapImage);
+        Person person = new Person.Builder()
+                .setName("Remguri") // 보낸 사람 이름
+                .setIcon(IconCompat.createWithResource(context, getDrawableResourceId(context, notificationDetails.icon))) // 아바타 이미지
+                .build();
+
+
+        Person person2 = new Person.Builder()
+                .setName("Ellen Joe") // 보낸 사람 이름
+                .setIcon(IconCompat.createWithResource(context, getDrawableResourceId(context, notificationDetails.icon))) // 아바타 이미지
+                .build();
+
+        NotificationCompat.MessagingStyle.Message m = new NotificationCompat.MessagingStyle.Message(
+                "text",
+                10101,
+                person
+        ).setData("image/png", Uri.parse("content://kr.cherry.dev.provider/avatar"));
+
+        NotificationCompat.MessagingStyle.Message m2 = new NotificationCompat.MessagingStyle.Message(
+                "ㅁㅇ니ㅏ허미허미ㅏ허미ㅏ어히멓임아허이ㅏㅁ허ㅣ마ㅓㅇ히마어히ㅏ멈이ㅏㅁㅇㄴ하ㅣㅓㅁㅇㄴㅎ;ㅣㅏㅓㅁㅇㅎ너ㅏㅣ;ㅁㅎㅇ니;ㅏㅁㅎㅇ니;ㅁㅎㅇㄴ;ㅣㅁㅇㅎ니ㅏ;ㅁㅎㅇㄴ;ㅣㅏㅁㅎㅇ너ㅣ;ㅁㅎㅇ;ㅣㅓ",
+                10101,
+                person2
+        );
+        NotificationCompat.MessagingStyle messagingStyle = new NotificationCompat.MessagingStyle(person)
+                .setGroupConversation(true)
+                .addMessage(m)
+             ;// 메시지 추가
+
+
+        updateShortcuts(context, customAvatarStyleInformation, person, shorcutId);
+
+        builder.setSmallIcon(getDrawableResourceId(context, notificationDetails.icon)) // 앱 아이콘 (작은 아이콘)
+                .setShortcutId(shorcutId)
+                .setShowWhen(true)
+                .setLargeIcon( getBitmapFromSource(
+                        context,
+                        customAvatarStyleInformation.customAvatar,
+                        customAvatarStyleInformation.customAvatarBitmapSource)) // 큰 아이콘(아바타)
+                .setStyle(messagingStyle);
+    }
+
+    @WorkerThread
+    private static void updateShortcuts(Context context, CustomAvatarStyleInformation information, Person person, String shortcutId)  {
+        IconCompat icon = IconCompat.createWithAdaptiveBitmap(
+              getBitmapFromSource(context, information.customAvatar, information.customAvatarBitmapSource)
+        );
+
+        ShortcutInfoCompat shortcut;
+        try {
+            shortcut = new ShortcutInfoCompat.Builder(context, shortcutId)
+                    .setLocusId(new LocusIdCompat(shortcutId))
+                    .setShortLabel("wow")
+                    .setIntent(
+                            new Intent(context, Class.forName("kr.cherry.dev.MainActivity"))
+                                    .setAction(Intent.ACTION_VIEW)
+                    )
+                    .setIcon(icon)
+                    .setLongLived(true)
+                    .setPerson(person)
+                    .build();
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+
+        List<ShortcutInfoCompat> list = new ArrayList<>();
+        list.add(shortcut);
+
+        ShortcutManagerCompat.addDynamicShortcuts(context, list);
+    }
 
   private static NotificationCompat.MessagingStyle.Message createMessage(
       Context context, MessageDetails messageDetails) {
